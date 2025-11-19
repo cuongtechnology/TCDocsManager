@@ -1,19 +1,28 @@
 <?php
 /**
- * File Manager Web App - One Page Application
- * Features: Auto file scanning, batch operations, auto categorization, preview, online edit
+ * Bảo Ngọc GROUP - Hệ thống Quản lý Tài liệu Nội bộ
+ * Hệ thống y tế chất lượng cao tại Thái Nguyên
+ * 
+ * Tính năng: Tự động quét, phân loại và quản lý tài liệu văn phòng
  */
 
-// Configuration
+// Configuration - Cấu hình thư mục cần quét
+define('COMPANY_NAME', 'Bảo Ngọc GROUP');
+define('COMPANY_DESC', 'Hệ thống y tế chất lượng cao tại Thái Nguyên');
 define('UPLOAD_DIR', __DIR__ . '/uploads');
-define('DB_FILE', __DIR__ . '/filemanager.db');
+define('DB_FILE', __DIR__ . '/documents.db');
+
+// Cấu hình các thư mục cần tự động quét
 define('SCAN_DIRS', [
-    __DIR__ . '/uploads',
-    __DIR__ . '/documents',
-    __DIR__ . '/media'
+    __DIR__ . '/tai-lieu-hanh-chinh',      // Tài liệu hành chính
+    __DIR__ . '/tai-lieu-ky-thuat',        // Tài liệu kỹ thuật y tế
+    __DIR__ . '/quy-dinh-noi-bo',          // Quy định nội bộ
+    __DIR__ . '/bieu-mau',                  // Biểu mẫu
+    __DIR__ . '/bao-cao',                   // Báo cáo
+    __DIR__ . '/uploads',                   // Upload chung
 ]);
 
-// Create necessary directories
+// Tự động tạo các thư mục nếu chưa tồn tại
 foreach (SCAN_DIRS as $dir) {
     if (!is_dir($dir)) {
         mkdir($dir, 0755, true);
@@ -21,7 +30,7 @@ foreach (SCAN_DIRS as $dir) {
 }
 
 // Initialize SQLite Database
-class FileManager {
+class DocumentManager {
     private $db;
     
     public function __construct() {
@@ -42,25 +51,29 @@ class FileManager {
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 folder TEXT,
-                tags TEXT
+                tags TEXT,
+                description TEXT
             )
         ");
         
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_category ON files(category)");
         $this->db->exec("CREATE INDEX IF NOT EXISTS idx_filetype ON files(filetype)");
+        $this->db->exec("CREATE INDEX IF NOT EXISTS idx_folder ON files(folder)");
     }
     
     public function categorizeFile($filename, $mimeType) {
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         
+        // Phân loại theo loại tài liệu văn phòng
         $categories = [
-            'images' => ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'],
-            'videos' => ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm'],
-            'audio' => ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'],
-            'documents' => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt'],
-            'archives' => ['zip', 'rar', '7z', 'tar', 'gz', 'bz2'],
-            'code' => ['php', 'html', 'css', 'js', 'json', 'xml', 'py', 'java', 'c', 'cpp', 'sql'],
-            'others' => []
+            'word' => ['doc', 'docx', 'odt', 'rtf'],
+            'excel' => ['xls', 'xlsx', 'csv', 'ods'],
+            'powerpoint' => ['ppt', 'pptx', 'odp'],
+            'pdf' => ['pdf'],
+            'text' => ['txt', 'text'],
+            'image' => ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
+            'archive' => ['zip', 'rar', '7z', 'tar', 'gz'],
+            'other' => []
         ];
         
         foreach ($categories as $category => $extensions) {
@@ -69,7 +82,7 @@ class FileManager {
             }
         }
         
-        return 'others';
+        return 'other';
     }
     
     public function scanDirectories() {
@@ -116,15 +129,19 @@ class FileManager {
         return $scanned;
     }
     
-    public function getFiles($category = null, $search = null, $limit = 100, $offset = 0) {
+    public function getFiles($category = null, $folder = null, $search = null, $limit = 100, $offset = 0) {
         $sql = "SELECT * FROM files WHERE 1=1";
         
         if ($category && $category != 'all') {
             $sql .= " AND category = :category";
         }
         
+        if ($folder && $folder != 'all') {
+            $sql .= " AND folder = :folder";
+        }
+        
         if ($search) {
-            $sql .= " AND (filename LIKE :search OR tags LIKE :search)";
+            $sql .= " AND (filename LIKE :search OR tags LIKE :search OR description LIKE :search)";
         }
         
         $sql .= " ORDER BY updated_at DESC LIMIT :limit OFFSET :offset";
@@ -133,6 +150,10 @@ class FileManager {
         
         if ($category && $category != 'all') {
             $stmt->bindValue(':category', $category, SQLITE3_TEXT);
+        }
+        
+        if ($folder && $folder != 'all') {
+            $stmt->bindValue(':folder', $folder, SQLITE3_TEXT);
         }
         
         if ($search) {
@@ -150,6 +171,17 @@ class FileManager {
         }
         
         return $files;
+    }
+    
+    public function getFolders() {
+        $result = $this->db->query("SELECT DISTINCT folder FROM files ORDER BY folder");
+        $folders = [];
+        
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $folders[] = $row['folder'];
+        }
+        
+        return $folders;
     }
     
     public function getFileById($id) {
@@ -177,9 +209,9 @@ class FileManager {
         return true;
     }
     
-    public function updateTags($id, $tags) {
-        $stmt = $this->db->prepare("UPDATE files SET tags = :tags, updated_at = datetime('now') WHERE id = :id");
-        $stmt->bindValue(':tags', $tags, SQLITE3_TEXT);
+    public function updateDescription($id, $description) {
+        $stmt = $this->db->prepare("UPDATE files SET description = :description, updated_at = datetime('now') WHERE id = :id");
+        $stmt->bindValue(':description', $description, SQLITE3_TEXT);
         $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
         return $stmt->execute();
     }
@@ -201,9 +233,33 @@ class FileManager {
         
         return $stats;
     }
+    
+    public function getStatsByFolder() {
+        $result = $this->db->query("
+            SELECT 
+                folder,
+                COUNT(*) as count,
+                SUM(filesize) as total_size
+            FROM files
+            GROUP BY folder
+        ");
+        
+        $stats = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $stats[] = $row;
+        }
+        
+        return $stats;
+    }
 }
 
-$fm = new FileManager();
+$dm = new DocumentManager();
+
+// Tự động quét files khi lần đầu truy cập (nếu database rỗng)
+$result = $dm->getStats();
+if (empty($result)) {
+    $dm->scanDirectories();
+}
 
 // Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -213,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     switch ($action) {
         case 'scan':
-            $count = $fm->scanDirectories();
+            $count = $dm->scanDirectories();
             echo json_encode(['success' => true, 'count' => $count]);
             break;
             
@@ -228,40 +284,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $uploaded[] = $filename;
                     }
                 }
-                $fm->scanDirectories();
+                $dm->scanDirectories();
                 echo json_encode(['success' => true, 'files' => $uploaded]);
             }
             break;
             
         case 'delete':
             $id = intval($_POST['id']);
-            $fm->deleteFile($id);
+            $dm->deleteFile($id);
             echo json_encode(['success' => true]);
             break;
             
         case 'delete_multiple':
             $ids = json_decode($_POST['ids'], true);
-            $fm->deleteMultiple($ids);
+            $dm->deleteMultiple($ids);
             echo json_encode(['success' => true]);
             break;
             
-        case 'update_tags':
+        case 'update_description':
             $id = intval($_POST['id']);
-            $tags = $_POST['tags'];
-            $fm->updateTags($id, $tags);
+            $description = $_POST['description'];
+            $dm->updateDescription($id, $description);
             echo json_encode(['success' => true]);
-            break;
-            
-        case 'save_file':
-            $id = intval($_POST['id']);
-            $content = $_POST['content'];
-            $file = $fm->getFileById($id);
-            if ($file && file_exists($file['filepath'])) {
-                file_put_contents($file['filepath'], $content);
-                echo json_encode(['success' => true]);
-            } else {
-                echo json_encode(['success' => false, 'error' => 'File not found']);
-            }
             break;
             
         default:
@@ -277,19 +321,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
     switch ($_GET['action']) {
         case 'list':
             $category = $_GET['category'] ?? null;
+            $folder = $_GET['folder'] ?? null;
             $search = $_GET['search'] ?? null;
-            $files = $fm->getFiles($category, $search);
+            $files = $dm->getFiles($category, $folder, $search);
             echo json_encode(['success' => true, 'files' => $files]);
             break;
             
+        case 'folders':
+            $folders = $dm->getFolders();
+            echo json_encode(['success' => true, 'folders' => $folders]);
+            break;
+            
         case 'stats':
-            $stats = $fm->getStats();
-            echo json_encode(['success' => true, 'stats' => $stats]);
+            $stats = $dm->getStats();
+            $folderStats = $dm->getStatsByFolder();
+            echo json_encode(['success' => true, 'stats' => $stats, 'folderStats' => $folderStats]);
             break;
             
         case 'get_file':
             $id = intval($_GET['id']);
-            $file = $fm->getFileById($id);
+            $file = $dm->getFileById($id);
             if ($file && file_exists($file['filepath'])) {
                 $content = file_get_contents($file['filepath']);
                 echo json_encode(['success' => true, 'file' => $file, 'content' => $content]);
@@ -300,7 +351,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             
         case 'preview':
             $id = intval($_GET['id']);
-            $file = $fm->getFileById($id);
+            $file = $dm->getFileById($id);
             if ($file && file_exists($file['filepath'])) {
                 $finfo = finfo_open(FILEINFO_MIME_TYPE);
                 $mime = finfo_file($finfo, $file['filepath']);
@@ -314,7 +365,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             
         case 'download':
             $id = intval($_GET['id']);
-            $file = $fm->getFileById($id);
+            $file = $dm->getFileById($id);
             if ($file && file_exists($file['filepath'])) {
                 header('Content-Type: application/octet-stream');
                 header('Content-Disposition: attachment; filename="' . basename($file['filename']) . '"');
@@ -331,7 +382,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Manager Pro - One Page App</title>
+    <title><?= COMPANY_NAME ?> - Hệ thống Quản lý Tài liệu</title>
     <style>
         * {
             margin: 0;
@@ -341,7 +392,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0066cc 0%, #0099ff 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -356,15 +407,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         }
         
         header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0066cc 0%, #0099ff 100%);
             color: white;
             padding: 30px;
             text-align: center;
         }
         
         header h1 {
-            font-size: 2.5em;
+            font-size: 2.2em;
             margin-bottom: 10px;
+        }
+        
+        header p {
+            font-size: 1.1em;
+            opacity: 0.95;
         }
         
         .toolbar {
@@ -391,14 +447,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         }
         
         .btn-primary {
-            background: #667eea;
+            background: #0066cc;
             color: white;
         }
         
         .btn-primary:hover {
-            background: #5568d3;
+            background: #0052a3;
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 5px 15px rgba(0, 102, 204, 0.4);
         }
         
         .btn-success {
@@ -435,37 +491,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         
         .search-box input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #0066cc;
         }
         
-        .categories {
-            display: flex;
-            gap: 10px;
+        .filters {
             padding: 20px 30px;
             background: white;
             border-bottom: 2px solid #e9ecef;
-            overflow-x: auto;
         }
         
-        .category-btn {
-            padding: 10px 20px;
+        .filter-section {
+            margin-bottom: 15px;
+        }
+        
+        .filter-section h3 {
+            font-size: 14px;
+            color: #6c757d;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-btn {
+            padding: 8px 16px;
             border: 2px solid #e9ecef;
-            border-radius: 25px;
+            border-radius: 20px;
             background: white;
             cursor: pointer;
             font-weight: 600;
+            font-size: 13px;
             transition: all 0.3s;
             white-space: nowrap;
         }
         
-        .category-btn.active {
-            background: #667eea;
+        .filter-btn.active {
+            background: #0066cc;
             color: white;
-            border-color: #667eea;
+            border-color: #0066cc;
         }
         
-        .category-btn:hover {
-            border-color: #667eea;
+        .filter-btn:hover {
+            border-color: #0066cc;
             transform: translateY(-2px);
         }
         
@@ -488,17 +559,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         .stat-card .number {
             font-size: 2em;
             font-weight: bold;
-            color: #667eea;
+            color: #0066cc;
         }
         
         .stat-card .label {
             color: #6c757d;
             margin-top: 5px;
+            font-size: 13px;
         }
         
         .file-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
             gap: 20px;
             padding: 30px;
         }
@@ -516,12 +588,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         .file-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-            border-color: #667eea;
+            border-color: #0066cc;
         }
         
         .file-card.selected {
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+            border-color: #0066cc;
+            box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2);
         }
         
         .file-preview {
@@ -530,8 +602,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 3em;
-            color: #667eea;
+            font-size: 4em;
         }
         
         .file-preview img {
@@ -555,6 +626,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         .file-meta {
             font-size: 12px;
             color: #6c757d;
+            margin-bottom: 5px;
+        }
+        
+        .file-folder {
+            font-size: 11px;
+            color: #0066cc;
+            background: #e6f2ff;
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 5px;
         }
         
         .file-actions {
@@ -644,32 +726,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             font-weight: bold;
         }
         
-        .editor-container {
-            width: 800px;
-            max-width: 100%;
-        }
-        
-        .editor-textarea {
-            width: 100%;
-            height: 500px;
-            padding: 15px;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            resize: vertical;
-        }
-        
         .preview-container {
             max-width: 1000px;
             max-height: 80vh;
         }
         
         .preview-container img,
-        .preview-container video,
-        .preview-container audio {
+        .preview-container video {
             max-width: 100%;
             max-height: 70vh;
+        }
+        
+        .preview-container iframe {
+            width: 100%;
+            height: 70vh;
+            border: none;
         }
         
         .loading {
@@ -712,6 +783,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             transform: translateY(-2px);
         }
         
+        .auto-scan-notice {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 12px 20px;
+            margin: 20px 30px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
         @media (max-width: 768px) {
             .file-grid {
                 grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -724,7 +807,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             }
             
             header h1 {
-                font-size: 1.8em;
+                font-size: 1.6em;
             }
         }
     </style>
@@ -732,17 +815,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
 <body>
     <div class="container">
         <header>
-            <h1>📁 File Manager Pro</h1>
-            <p>Quản lý files thông minh với tự động phân loại và preview</p>
+            <h1>🏥 <?= COMPANY_NAME ?></h1>
+            <p><?= COMPANY_DESC ?></p>
+            <p style="font-size: 0.9em; margin-top: 8px;">📋 Hệ thống Quản lý Tài liệu Nội bộ</p>
         </header>
+        
+        <div class="auto-scan-notice">
+            <span style="font-size: 1.5em;">ℹ️</span>
+            <span><strong>Quét tự động:</strong> Hệ thống đã tự động quét và cập nhật tài liệu từ các thư mục được cấu hình.</span>
+        </div>
         
         <div class="toolbar">
             <button class="btn btn-primary" onclick="scanFiles()">
-                🔄 Quét Files
+                🔄 Quét lại Tài liệu
             </button>
             
             <label class="file-upload-label">
-                📤 Tải lên
+                📤 Tải lên Tài liệu
                 <input type="file" id="fileInput" multiple onchange="uploadFiles()">
             </label>
             
@@ -751,41 +840,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             </button>
             
             <div class="search-box">
-                <input type="text" id="searchInput" placeholder="🔍 Tìm kiếm files..." onkeyup="searchFiles()">
+                <input type="text" id="searchInput" placeholder="🔍 Tìm kiếm tài liệu..." onkeyup="searchFiles()">
             </div>
         </div>
         
-        <div class="categories">
-            <button class="category-btn active" data-category="all" onclick="filterCategory('all')">
-                📂 Tất cả
-            </button>
-            <button class="category-btn" data-category="images" onclick="filterCategory('images')">
-                🖼️ Hình ảnh
-            </button>
-            <button class="category-btn" data-category="videos" onclick="filterCategory('videos')">
-                🎬 Video
-            </button>
-            <button class="category-btn" data-category="audio" onclick="filterCategory('audio')">
-                🎵 Audio
-            </button>
-            <button class="category-btn" data-category="documents" onclick="filterCategory('documents')">
-                📄 Tài liệu
-            </button>
-            <button class="category-btn" data-category="code" onclick="filterCategory('code')">
-                💻 Code
-            </button>
-            <button class="category-btn" data-category="archives" onclick="filterCategory('archives')">
-                📦 Archives
-            </button>
-            <button class="category-btn" data-category="others" onclick="filterCategory('others')">
-                📎 Khác
-            </button>
+        <div class="filters">
+            <div class="filter-section">
+                <h3>📁 Loại tài liệu</h3>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-category="all" onclick="filterCategory('all')">
+                        📂 Tất cả
+                    </button>
+                    <button class="filter-btn" data-category="pdf" onclick="filterCategory('pdf')">
+                        📕 PDF
+                    </button>
+                    <button class="filter-btn" data-category="word" onclick="filterCategory('word')">
+                        📘 Word
+                    </button>
+                    <button class="filter-btn" data-category="excel" onclick="filterCategory('excel')">
+                        📗 Excel
+                    </button>
+                    <button class="filter-btn" data-category="powerpoint" onclick="filterCategory('powerpoint')">
+                        📙 PowerPoint
+                    </button>
+                    <button class="filter-btn" data-category="image" onclick="filterCategory('image')">
+                        🖼️ Hình ảnh
+                    </button>
+                    <button class="filter-btn" data-category="archive" onclick="filterCategory('archive')">
+                        📦 Nén
+                    </button>
+                </div>
+            </div>
+            
+            <div class="filter-section" id="folderFilterSection">
+                <h3>📂 Thư mục</h3>
+                <div class="filter-buttons" id="folderFilters">
+                    <button class="filter-btn active" data-folder="all" onclick="filterFolder('all')">
+                        📁 Tất cả thư mục
+                    </button>
+                </div>
+            </div>
         </div>
         
         <div class="stats" id="statsContainer"></div>
         
         <div class="file-grid" id="fileGrid">
-            <div class="loading">Đang tải...</div>
+            <div class="loading">Đang tải tài liệu...</div>
         </div>
     </div>
     
@@ -793,53 +893,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
     <div class="modal" id="previewModal">
         <div class="modal-content preview-container">
             <div class="modal-header">
-                <h2 id="previewTitle">Preview</h2>
+                <h2 id="previewTitle">Xem tài liệu</h2>
                 <button class="close-modal" onclick="closeModal('previewModal')">×</button>
             </div>
             <div class="modal-body" id="previewBody"></div>
         </div>
     </div>
     
-    <!-- Editor Modal -->
-    <div class="modal" id="editorModal">
-        <div class="modal-content editor-container">
-            <div class="modal-header">
-                <h2 id="editorTitle">Chỉnh sửa File</h2>
-                <div>
-                    <button class="btn btn-success" onclick="saveFile()">💾 Lưu</button>
-                    <button class="close-modal" onclick="closeModal('editorModal')">×</button>
-                </div>
-            </div>
-            <div class="modal-body">
-                <textarea class="editor-textarea" id="editorTextarea"></textarea>
-            </div>
-        </div>
-    </div>
-    
     <script>
         let currentCategory = 'all';
+        let currentFolder = 'all';
         let currentSearch = '';
         let selectedFiles = new Set();
-        let currentEditFileId = null;
         
         // Icons for file types
         const fileIcons = {
-            images: '🖼️',
-            videos: '🎬',
-            audio: '🎵',
-            documents: '📄',
-            code: '💻',
-            archives: '📦',
-            others: '📎'
+            pdf: '📕',
+            word: '📘',
+            excel: '📗',
+            powerpoint: '📙',
+            text: '📝',
+            image: '🖼️',
+            archive: '📦',
+            other: '📎'
         };
         
         // Load files on page load
         window.addEventListener('DOMContentLoaded', () => {
             loadFiles();
             loadStats();
+            loadFolders();
         });
         
         async function scanFiles() {
+            if (!confirm('Bạn muốn quét lại tất cả tài liệu từ các thư mục?')) return;
+            
             const formData = new FormData();
             formData.append('action', 'scan');
             
@@ -851,13 +939,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(`✅ Đã quét ${data.count} files!`);
+                    alert(`✅ Đã quét ${data.count} tài liệu!`);
                     loadFiles();
                     loadStats();
+                    loadFolders();
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('❌ Lỗi khi quét files!');
+                alert('❌ Lỗi khi quét tài liệu!');
             }
         }
         
@@ -882,23 +971,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(`✅ Đã tải lên ${data.files.length} files!`);
+                    alert(`✅ Đã tải lên ${data.files.length} tài liệu!`);
                     loadFiles();
                     loadStats();
                     fileInput.value = '';
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('❌ Lỗi khi tải lên files!');
+                alert('❌ Lỗi khi tải lên tài liệu!');
             }
         }
         
         async function loadFiles() {
             const fileGrid = document.getElementById('fileGrid');
-            fileGrid.innerHTML = '<div class="loading">Đang tải...</div>';
+            fileGrid.innerHTML = '<div class="loading">Đang tải tài liệu...</div>';
             
             try {
-                const response = await fetch(`?action=list&category=${currentCategory}&search=${encodeURIComponent(currentSearch)}`);
+                const response = await fetch(`?action=list&category=${currentCategory}&folder=${encodeURIComponent(currentFolder)}&search=${encodeURIComponent(currentSearch)}`);
                 const data = await response.json();
                 
                 if (data.success && data.files.length > 0) {
@@ -907,24 +996,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                     fileGrid.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">📂</div>
-                            <h2>Không có files</h2>
-                            <p>Nhấn "Quét Files" để tìm files hoặc tải lên files mới</p>
+                            <h2>Không có tài liệu</h2>
+                            <p>Nhấn "Quét lại Tài liệu" để quét từ các thư mục hoặc tải lên tài liệu mới</p>
                         </div>
                     `;
                 }
             } catch (error) {
                 console.error('Error:', error);
-                fileGrid.innerHTML = '<div class="loading">❌ Lỗi khi tải files!</div>';
+                fileGrid.innerHTML = '<div class="loading">❌ Lỗi khi tải tài liệu!</div>';
             }
         }
         
         function createFileCard(file) {
             const icon = fileIcons[file.category] || '📎';
-            const previewHtml = (file.category === 'images') 
+            const previewHtml = (file.category === 'image') 
                 ? `<img src="?action=preview&id=${file.id}" alt="${file.filename}">`
-                : `<div>${icon}</div>`;
+                : `<div style="color: #0066cc;">${icon}</div>`;
             
             const size = formatFileSize(file.filesize);
+            const folderName = file.folder.split('/').pop() || 'uploads';
             
             return `
                 <div class="file-card ${selectedFiles.has(file.id) ? 'selected' : ''}" data-id="${file.id}">
@@ -935,12 +1025,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                     <div class="file-info">
                         <div class="file-name" title="${file.filename}">${file.filename}</div>
                         <div class="file-meta">
-                            ${size} • ${file.category}
+                            ${size} • ${file.category.toUpperCase()}
                         </div>
+                        <div class="file-folder">${folderName}</div>
                     </div>
                     <div class="file-actions">
                         <button onclick="previewFile(${file.id})" title="Xem">👁️</button>
-                        <button onclick="editFile(${file.id})" title="Sửa">✏️</button>
                         <button onclick="downloadFile(${file.id})" title="Tải về">⬇️</button>
                         <button onclick="deleteFile(${file.id})" title="Xoá">🗑️</button>
                     </div>
@@ -966,22 +1056,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                     const totalFiles = data.stats.reduce((sum, stat) => sum + stat.count, 0);
                     const totalSize = data.stats.reduce((sum, stat) => sum + stat.total_size, 0);
                     
-                    statsContainer.innerHTML = `
+                    let statsHtml = `
                         <div class="stat-card">
                             <div class="number">${totalFiles}</div>
-                            <div class="label">Tổng số files</div>
+                            <div class="label">Tổng số tài liệu</div>
                         </div>
                         <div class="stat-card">
                             <div class="number">${formatFileSize(totalSize)}</div>
                             <div class="label">Tổng dung lượng</div>
                         </div>
-                        ${data.stats.map(stat => `
+                    `;
+                    
+                    data.stats.forEach(stat => {
+                        statsHtml += `
                             <div class="stat-card">
                                 <div class="number">${stat.count}</div>
-                                <div class="label">${fileIcons[stat.category]} ${stat.category}</div>
+                                <div class="label">${fileIcons[stat.category]} ${stat.category.toUpperCase()}</div>
                             </div>
-                        `).join('')}
+                        `;
+                    });
+                    
+                    statsContainer.innerHTML = statsHtml;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        async function loadFolders() {
+            try {
+                const response = await fetch('?action=folders');
+                const data = await response.json();
+                
+                if (data.success && data.folders.length > 0) {
+                    const folderFilters = document.getElementById('folderFilters');
+                    let html = `
+                        <button class="filter-btn active" data-folder="all" onclick="filterFolder('all')">
+                            📁 Tất cả thư mục
+                        </button>
                     `;
+                    
+                    data.folders.forEach(folder => {
+                        const folderName = folder.split('/').pop() || 'root';
+                        html += `
+                            <button class="filter-btn" data-folder="${folder}" onclick="filterFolder('${folder}')">
+                                📂 ${folderName}
+                            </button>
+                        `;
+                    });
+                    
+                    folderFilters.innerHTML = html;
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -991,7 +1115,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         function filterCategory(category) {
             currentCategory = category;
             
-            document.querySelectorAll('.category-btn').forEach(btn => {
+            document.querySelectorAll('[data-category]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            event.target.classList.add('active');
+            loadFiles();
+        }
+        
+        function filterFolder(folder) {
+            currentFolder = folder;
+            
+            document.querySelectorAll('[data-folder]').forEach(btn => {
                 btn.classList.remove('active');
             });
             
@@ -1042,16 +1177,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                     
                     let previewHtml = '';
                     
-                    if (data.file.category === 'images') {
-                        previewHtml = `<img src="?action=preview&id=${id}" alt="${data.file.filename}">`;
-                    } else if (data.file.category === 'videos') {
-                        previewHtml = `<video controls><source src="?action=preview&id=${id}"></video>`;
-                    } else if (data.file.category === 'audio') {
-                        previewHtml = `<audio controls><source src="?action=preview&id=${id}"></audio>`;
-                    } else if (data.file.category === 'documents' || data.file.category === 'code') {
-                        previewHtml = `<pre style="white-space: pre-wrap; background: #f8f9fa; padding: 20px; border-radius: 8px; max-height: 500px; overflow: auto;">${escapeHtml(data.content)}</pre>`;
+                    if (data.file.category === 'image') {
+                        previewHtml = `<img src="?action=preview&id=${id}" alt="${data.file.filename}" style="max-width: 100%;">`;
+                    } else if (data.file.category === 'pdf') {
+                        previewHtml = `
+                            <iframe src="?action=preview&id=${id}" style="width: 100%; height: 70vh;"></iframe>
+                            <p style="margin-top: 15px; text-align: center;">
+                                <a href="?action=download&id=${id}" class="btn btn-primary">⬇️ Tải về tài liệu</a>
+                            </p>
+                        `;
                     } else {
-                        previewHtml = `<p>Không thể preview loại file này. <a href="?action=download&id=${id}">Tải về</a></p>`;
+                        previewHtml = `
+                            <div style="text-align: center; padding: 40px;">
+                                <div style="font-size: 5em; margin-bottom: 20px;">📄</div>
+                                <h3>${data.file.filename}</h3>
+                                <p style="color: #6c757d; margin: 15px 0;">Loại: ${data.file.category.toUpperCase()} • Dung lượng: ${formatFileSize(data.file.filesize)}</p>
+                                <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none; margin-top: 20px;">⬇️ Tải về tài liệu</a>
+                            </div>
+                        `;
                     }
                     
                     body.innerHTML = previewHtml;
@@ -1059,67 +1202,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('❌ Lỗi khi xem file!');
-            }
-        }
-        
-        async function editFile(id) {
-            try {
-                const response = await fetch(`?action=get_file&id=${id}`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    if (data.file.category === 'documents' || data.file.category === 'code') {
-                        const modal = document.getElementById('editorModal');
-                        const title = document.getElementById('editorTitle');
-                        const textarea = document.getElementById('editorTextarea');
-                        
-                        title.textContent = `Chỉnh sửa: ${data.file.filename}`;
-                        textarea.value = data.content;
-                        currentEditFileId = id;
-                        
-                        modal.classList.add('active');
-                    } else {
-                        alert('⚠️ Chỉ có thể chỉnh sửa files văn bản và code!');
-                    }
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('❌ Lỗi khi mở file!');
-            }
-        }
-        
-        async function saveFile() {
-            if (!currentEditFileId) return;
-            
-            const content = document.getElementById('editorTextarea').value;
-            const formData = new FormData();
-            formData.append('action', 'save_file');
-            formData.append('id', currentEditFileId);
-            formData.append('content', content);
-            
-            try {
-                const response = await fetch('', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.success) {
-                    alert('✅ Đã lưu file!');
-                    closeModal('editorModal');
-                    loadFiles();
-                } else {
-                    alert('❌ Lỗi khi lưu file!');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('❌ Lỗi khi lưu file!');
+                alert('❌ Lỗi khi xem tài liệu!');
             }
         }
         
         async function deleteFile(id) {
-            if (!confirm('Bạn có chắc muốn xoá file này?')) return;
+            if (!confirm('Bạn có chắc muốn xoá tài liệu này?')) return;
             
             const formData = new FormData();
             formData.append('action', 'delete');
@@ -1133,20 +1221,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert('✅ Đã xoá file!');
+                    alert('✅ Đã xoá tài liệu!');
                     loadFiles();
                     loadStats();
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('❌ Lỗi khi xoá file!');
+                alert('❌ Lỗi khi xoá tài liệu!');
             }
         }
         
         async function deleteSelected() {
             if (selectedFiles.size === 0) return;
             
-            if (!confirm(`Bạn có chắc muốn xoá ${selectedFiles.size} files đã chọn?`)) return;
+            if (!confirm(`Bạn có chắc muốn xoá ${selectedFiles.size} tài liệu đã chọn?`)) return;
             
             const formData = new FormData();
             formData.append('action', 'delete_multiple');
@@ -1160,7 +1248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(`✅ Đã xoá ${selectedFiles.size} files!`);
+                    alert(`✅ Đã xoá ${selectedFiles.size} tài liệu!`);
                     selectedFiles.clear();
                     updateSelectedUI();
                     loadFiles();
@@ -1168,7 +1256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('❌ Lỗi khi xoá files!');
+                alert('❌ Lỗi khi xoá tài liệu!');
             }
         }
         
@@ -1178,12 +1266,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         
         function closeModal(modalId) {
             document.getElementById(modalId).classList.remove('active');
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
         }
         
         // Close modal on outside click
