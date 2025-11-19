@@ -4,13 +4,23 @@
  * Hệ thống y tế chất lượng cao tại Thái Nguyên
  * 
  * Tính năng: Tự động quét, phân loại và quản lý tài liệu văn phòng
+ * 
+ * Phân quyền:
+ * - PUBLIC: Xem và tải tài liệu (không cần login)
+ * - ADMIN: Upload, xoá, quản lý tài liệu (cần login)
  */
+
+session_start();
 
 // Configuration - Cấu hình thư mục cần quét
 define('COMPANY_NAME', 'Bảo Ngọc GROUP');
 define('COMPANY_DESC', 'Hệ thống y tế chất lượng cao tại Thái Nguyên');
 define('UPLOAD_DIR', __DIR__ . '/uploads');
 define('DB_FILE', __DIR__ . '/documents.db');
+
+// Admin credentials - Thay đổi username và password tại đây
+define('ADMIN_USERNAME', 'admin');
+define('ADMIN_PASSWORD', 'baongoc2025'); // Nên đổi password này!
 
 // Cấu hình các thư mục cần tự động quét
 define('SCAN_DIRS', [
@@ -21,6 +31,42 @@ define('SCAN_DIRS', [
     __DIR__ . '/bao-cao',                   // Báo cáo
     __DIR__ . '/uploads',                   // Upload chung
 ]);
+
+// Authentication functions
+function isAdmin() {
+    return isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+}
+
+function requireAdmin() {
+    if (!isAdmin()) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Cần đăng nhập quản trị viên']);
+        exit;
+    }
+}
+
+// Handle login/logout
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    if ($_POST['action'] === 'login') {
+        $username = $_POST['username'] ?? '';
+        $password = $_POST['password'] ?? '';
+        
+        if ($username === ADMIN_USERNAME && $password === ADMIN_PASSWORD) {
+            $_SESSION['admin_logged_in'] = true;
+            echo json_encode(['success' => true, 'message' => 'Đăng nhập thành công']);
+            exit;
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Sai tên đăng nhập hoặc mật khẩu']);
+            exit;
+        }
+    }
+    
+    if ($_POST['action'] === 'logout') {
+        session_destroy();
+        echo json_encode(['success' => true, 'message' => 'Đã đăng xuất']);
+        exit;
+    }
+}
 
 // Tự động tạo các thư mục nếu chưa tồn tại
 foreach (SCAN_DIRS as $dir) {
@@ -268,12 +314,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
     switch ($action) {
+        case 'check_auth':
+            echo json_encode(['success' => true, 'isAdmin' => isAdmin()]);
+            break;
+            
         case 'scan':
+            requireAdmin(); // Chỉ admin mới được quét
             $count = $dm->scanDirectories();
             echo json_encode(['success' => true, 'count' => $count]);
             break;
             
         case 'upload':
+            requireAdmin(); // Chỉ admin mới được upload
             if (isset($_FILES['files'])) {
                 $uploaded = [];
                 foreach ($_FILES['files']['tmp_name'] as $key => $tmp_name) {
@@ -290,18 +342,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
             
         case 'delete':
+            requireAdmin(); // Chỉ admin mới được xoá
             $id = intval($_POST['id']);
             $dm->deleteFile($id);
             echo json_encode(['success' => true]);
             break;
             
         case 'delete_multiple':
+            requireAdmin(); // Chỉ admin mới được xoá hàng loạt
             $ids = json_decode($_POST['ids'], true);
             $dm->deleteMultiple($ids);
             echo json_encode(['success' => true]);
             break;
             
         case 'update_description':
+            requireAdmin(); // Chỉ admin mới được cập nhật
             $id = intval($_POST['id']);
             $description = $_POST['description'];
             $dm->updateDescription($id, $description);
@@ -807,6 +862,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             gap: 10px;
         }
         
+        .admin-panel {
+            background: #e7f3ff;
+            border: 2px solid #0066cc;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .admin-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #004085;
+            font-weight: 600;
+        }
+        
+        .login-btn {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .login-btn:hover {
+            background: #0052a3;
+        }
+        
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .logout-btn:hover {
+            background: #c82333;
+        }
+        
+        .login-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .login-form input {
+            padding: 8px 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .login-form input:focus {
+            outline: none;
+            border-color: #0066cc;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .admin-only {
+            display: none;
+        }
+        
+        .admin-mode .admin-only {
+            display: inline-flex;
+        }
+        
         @media (max-width: 768px) {
             .file-grid {
                 grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -832,22 +964,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             <p style="font-size: 0.9em; margin-top: 8px;">📋 Hệ thống Quản lý Tài liệu Nội bộ</p>
         </header>
         
+        <!-- Admin Panel -->
+        <div class="admin-panel" id="adminPanel">
+            <div id="loginArea">
+                <div class="login-form">
+                    <input type="text" id="username" placeholder="Tên đăng nhập" />
+                    <input type="password" id="password" placeholder="Mật khẩu" />
+                    <button class="login-btn" onclick="login()">🔐 Đăng nhập Quản trị</button>
+                </div>
+            </div>
+            <div id="loggedInArea" class="hidden">
+                <div class="admin-info">
+                    <span>👤 Quản trị viên</span>
+                    <button class="logout-btn" onclick="logout()">🚪 Đăng xuất</button>
+                </div>
+            </div>
+        </div>
+        
         <div class="auto-scan-notice">
             <span style="font-size: 1.5em;">ℹ️</span>
             <span><strong>Quét tự động:</strong> Hệ thống đã tự động quét và cập nhật tài liệu từ các thư mục được cấu hình.</span>
         </div>
         
-        <div class="toolbar">
-            <button class="btn btn-primary" onclick="scanFiles()">
+        <div class="toolbar" id="toolbar">
+            <button class="btn btn-primary admin-only" onclick="scanFiles()">
                 🔄 Quét lại Tài liệu
             </button>
             
-            <label class="file-upload-label">
+            <label class="file-upload-label admin-only">
                 📤 Tải lên Tài liệu
                 <input type="file" id="fileInput" multiple onchange="uploadFiles()">
             </label>
             
-            <button class="btn btn-danger" onclick="deleteSelected()" id="deleteBtn" style="display:none;">
+            <button class="btn btn-danger admin-only" onclick="deleteSelected()" id="deleteBtn" style="display:none;">
                 🗑️ Xoá đã chọn
             </button>
             
@@ -917,6 +1066,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         let currentFolder = 'all';
         let currentSearch = '';
         let selectedFiles = new Set();
+        let isAdminMode = false;
         
         // Icons for file types
         const fileIcons = {
@@ -932,9 +1082,137 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         
         // Load files on page load
         window.addEventListener('DOMContentLoaded', () => {
+            checkAuth();
             loadFiles();
             loadStats();
             loadFolders();
+        });
+        
+        // Check authentication status
+        async function checkAuth() {
+            try {
+                const formData = new FormData();
+                formData.append('action', 'check_auth');
+                
+                const response = await fetch('', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.success && data.isAdmin) {
+                    isAdminMode = true;
+                    showAdminMode();
+                } else {
+                    isAdminMode = false;
+                    showPublicMode();
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                showPublicMode();
+            }
+        }
+        
+        // Login function
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                alert('⚠️ Vui lòng nhập tên đăng nhập và mật khẩu!');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('action', 'login');
+            formData.append('username', username);
+            formData.append('password', password);
+            
+            try {
+                const response = await fetch('', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ ' + data.message);
+                    isAdminMode = true;
+                    showAdminMode();
+                    document.getElementById('username').value = '';
+                    document.getElementById('password').value = '';
+                } else {
+                    alert('❌ ' + data.error);
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('❌ Lỗi khi đăng nhập!');
+            }
+        }
+        
+        // Logout function
+        async function logout() {
+            if (!confirm('Bạn có chắc muốn đăng xuất?')) return;
+            
+            const formData = new FormData();
+            formData.append('action', 'logout');
+            
+            try {
+                const response = await fetch('', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ ' + data.message);
+                    isAdminMode = false;
+                    showPublicMode();
+                    selectedFiles.clear();
+                    updateSelectedUI();
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+        
+        // Show admin mode UI
+        function showAdminMode() {
+            document.getElementById('loginArea').classList.add('hidden');
+            document.getElementById('loggedInArea').classList.remove('hidden');
+            document.getElementById('toolbar').classList.add('admin-mode');
+            
+            // Hiện checkboxes
+            document.querySelectorAll('.checkbox').forEach(cb => {
+                cb.style.display = 'block';
+            });
+        }
+        
+        // Show public mode UI
+        function showPublicMode() {
+            document.getElementById('loginArea').classList.remove('hidden');
+            document.getElementById('loggedInArea').classList.add('hidden');
+            document.getElementById('toolbar').classList.remove('admin-mode');
+            
+            // Ẩn checkboxes
+            document.querySelectorAll('.checkbox').forEach(cb => {
+                cb.style.display = 'none';
+            });
+            
+            // Ẩn nút delete
+            document.getElementById('deleteBtn').style.display = 'none';
+        }
+        
+        // Enter key for login
+        document.addEventListener('DOMContentLoaded', () => {
+            const passwordInput = document.getElementById('password');
+            if (passwordInput) {
+                passwordInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        login();
+                    }
+                });
+            }
         });
         
         async function scanFiles() {
@@ -1028,9 +1306,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             const size = formatFileSize(file.filesize);
             const folderName = file.folder.split('/').pop() || 'uploads';
             
+            // Chỉ hiện checkbox và nút xoá cho admin
+            const checkboxHtml = isAdminMode ? 
+                `<input type="checkbox" class="checkbox" onchange="toggleSelect(${file.id})" ${selectedFiles.has(file.id) ? 'checked' : ''}>` : '';
+            
+            const deleteButtonHtml = isAdminMode ? 
+                `<button onclick="deleteFile(${file.id})" title="Xoá">🗑️</button>` : '';
+            
             return `
                 <div class="file-card ${selectedFiles.has(file.id) ? 'selected' : ''}" data-id="${file.id}">
-                    <input type="checkbox" class="checkbox" onchange="toggleSelect(${file.id})" ${selectedFiles.has(file.id) ? 'checked' : ''}>
+                    ${checkboxHtml}
                     <div class="file-preview" onclick="previewFile(${file.id})">
                         ${previewHtml}
                     </div>
@@ -1044,7 +1329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                     <div class="file-actions">
                         <button onclick="previewFile(${file.id})" title="Xem">👁️</button>
                         <button onclick="downloadFile(${file.id})" title="Tải về">⬇️</button>
-                        <button onclick="deleteFile(${file.id})" title="Xoá">🗑️</button>
+                        ${deleteButtonHtml}
                     </div>
                 </div>
             `;
