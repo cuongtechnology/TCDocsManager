@@ -635,97 +635,136 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             font-size: 13px;
         }
         
-        .file-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 20px;
-            padding: 30px;
+        .file-table-container {
+            padding: 0 30px 30px 30px;
+            overflow-x: auto;
         }
         
-        .file-card {
-            background: white;
-            border: 2px solid #e9ecef;
-            border-radius: 12px;
-            overflow: hidden;
-            cursor: pointer;
-            transition: all 0.3s;
-            position: relative;
-        }
-        
-        .file-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-            border-color: #0066cc;
-        }
-        
-        .file-card.selected {
-            border-color: #0066cc;
-            box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2);
-        }
-        
-        .file-preview {
-            height: 150px;
-            background: #f8f9fa;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 4em;
-        }
-        
-        .file-preview img {
+        .file-table {
             width: 100%;
-            height: 100%;
-            object-fit: cover;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
         }
         
-        .file-info {
-            padding: 15px;
+        .file-table thead {
+            background: linear-gradient(135deg, #0066cc 0%, #0099ff 100%);
+            color: white;
         }
         
-        .file-name {
+        .file-table th {
+            padding: 15px 12px;
+            text-align: left;
             font-weight: 600;
-            margin-bottom: 5px;
-            white-space: nowrap;
+            font-size: 14px;
+            border-bottom: 2px solid #0052a3;
+        }
+        
+        .file-table th.center {
+            text-align: center;
+        }
+        
+        .file-table tbody tr {
+            border-bottom: 1px solid #e9ecef;
+            transition: all 0.2s;
+        }
+        
+        .file-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .file-table tbody tr.selected {
+            background: #e6f2ff;
+        }
+        
+        .file-table td {
+            padding: 12px;
+            font-size: 14px;
+        }
+        
+        .file-icon {
+            font-size: 24px;
+            text-align: center;
+        }
+        
+        .file-name-cell {
+            font-weight: 600;
+            color: #212529;
+            max-width: 300px;
             overflow: hidden;
             text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
-        .file-meta {
-            font-size: 12px;
-            color: #6c757d;
-            margin-bottom: 5px;
-        }
-        
-        .file-folder {
-            font-size: 11px;
+        .file-name-cell:hover {
             color: #0066cc;
-            background: #e6f2ff;
-            padding: 3px 8px;
-            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .file-size {
+            color: #6c757d;
+            font-size: 13px;
+        }
+        
+        .file-category-badge {
             display: inline-block;
-            margin-top: 5px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
         }
         
-        .file-actions {
-            display: flex;
-            gap: 5px;
-            padding: 10px;
-            border-top: 1px solid #e9ecef;
+        .badge-pdf { background: #ffe6e6; color: #cc0000; }
+        .badge-word { background: #e6f2ff; color: #0066cc; }
+        .badge-excel { background: #e6ffe6; color: #009900; }
+        .badge-powerpoint { background: #fff4e6; color: #ff8800; }
+        .badge-image { background: #f0e6ff; color: #6600cc; }
+        .badge-text { background: #e6e6e6; color: #333333; }
+        .badge-archive { background: #fff0e6; color: #cc6600; }
+        .badge-other { background: #f8f9fa; color: #6c757d; }
+        
+        .file-folder-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 11px;
+            background: #e9ecef;
+            color: #495057;
         }
         
-        .file-actions button {
-            flex: 1;
-            padding: 8px;
+        .file-actions-cell {
+            text-align: center;
+            white-space: nowrap;
+        }
+        
+        .file-actions-cell button {
+            padding: 6px 10px;
+            margin: 0 2px;
             border: none;
             background: #f8f9fa;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 12px;
-            transition: all 0.3s;
+            font-size: 16px;
+            transition: all 0.2s;
         }
         
-        .file-actions button:hover {
+        .file-actions-cell button:hover {
             background: #e9ecef;
+            transform: scale(1.1);
+        }
+        
+        .checkbox-cell {
+            text-align: center;
+            width: 40px;
+        }
+        
+        .checkbox-cell input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
         }
         
         .checkbox {
@@ -940,10 +979,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         }
         
         @media (max-width: 768px) {
-            .file-grid {
-                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                gap: 15px;
-                padding: 15px;
+            .file-table-container {
+                padding: 0 15px 15px 15px;
+            }
+            
+            .file-table th,
+            .file-table td {
+                padding: 8px 6px;
+                font-size: 12px;
+            }
+            
+            .file-name-cell {
+                max-width: 150px;
+            }
+            
+            .file-table th:nth-child(5),
+            .file-table td:nth-child(5),
+            .file-table th:nth-child(6),
+            .file-table td:nth-child(6) {
+                display: none; /* Ẩn size và folder trên mobile */
             }
             
             .toolbar {
@@ -952,6 +1006,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             
             header h1 {
                 font-size: 1.6em;
+            }
+            
+            .file-actions-cell button {
+                padding: 4px 8px;
+                font-size: 14px;
+                margin: 0 1px;
             }
         }
     </style>
@@ -1045,8 +1105,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         
         <div class="stats" id="statsContainer"></div>
         
-        <div class="file-grid" id="fileGrid">
-            <div class="loading">Đang tải tài liệu...</div>
+        <div class="file-table-container">
+            <table class="file-table" id="fileTable">
+                <thead>
+                    <tr>
+                        <th class="checkbox-cell admin-only">☑️</th>
+                        <th class="center">Icon</th>
+                        <th>Tên tài liệu</th>
+                        <th>Loại</th>
+                        <th>Dung lượng</th>
+                        <th>Thư mục</th>
+                        <th class="center">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="fileTableBody">
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 50px;">
+                            <div class="loading">Đang tải tài liệu...</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
     
@@ -1273,65 +1352,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
         }
         
         async function loadFiles() {
-            const fileGrid = document.getElementById('fileGrid');
-            fileGrid.innerHTML = '<div class="loading">Đang tải tài liệu...</div>';
+            const tableBody = document.getElementById('fileTableBody');
+            tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 50px;"><div class="loading">Đang tải tài liệu...</div></td></tr>';
             
             try {
                 const response = await fetch(`?action=list&category=${currentCategory}&folder=${encodeURIComponent(currentFolder)}&search=${encodeURIComponent(currentSearch)}`);
                 const data = await response.json();
                 
                 if (data.success && data.files.length > 0) {
-                    fileGrid.innerHTML = data.files.map(file => createFileCard(file)).join('');
+                    tableBody.innerHTML = data.files.map(file => createFileRow(file)).join('');
                 } else {
-                    fileGrid.innerHTML = `
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📂</div>
-                            <h2>Không có tài liệu</h2>
-                            <p>Nhấn "Quét lại Tài liệu" để quét từ các thư mục hoặc tải lên tài liệu mới</p>
-                        </div>
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 80px 20px;">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📂</div>
+                                    <h2>Không có tài liệu</h2>
+                                    <p>Nhấn "Quét lại Tài liệu" để quét từ các thư mục hoặc tải lên tài liệu mới</p>
+                                </div>
+                            </td>
+                        </tr>
                     `;
                 }
             } catch (error) {
                 console.error('Error:', error);
-                fileGrid.innerHTML = '<div class="loading">❌ Lỗi khi tải tài liệu!</div>';
+                tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 50px;">❌ Lỗi khi tải tài liệu!</td></tr>';
             }
         }
         
-        function createFileCard(file) {
+        function createFileRow(file) {
             const icon = fileIcons[file.category] || '📎';
-            const previewHtml = (file.category === 'image') 
-                ? `<img src="?action=preview&id=${file.id}" alt="${file.filename}">`
-                : `<div style="color: #0066cc;">${icon}</div>`;
-            
             const size = formatFileSize(file.filesize);
             const folderName = file.folder.split('/').pop() || 'uploads';
             
             // Chỉ hiện checkbox và nút xoá cho admin
             const checkboxHtml = isAdminMode ? 
-                `<input type="checkbox" class="checkbox" onchange="toggleSelect(${file.id})" ${selectedFiles.has(file.id) ? 'checked' : ''}>` : '';
+                `<td class="checkbox-cell"><input type="checkbox" onchange="toggleSelect(${file.id})" ${selectedFiles.has(file.id) ? 'checked' : ''}></td>` : 
+                '<td class="checkbox-cell"></td>';
             
             const deleteButtonHtml = isAdminMode ? 
                 `<button onclick="deleteFile(${file.id})" title="Xoá">🗑️</button>` : '';
             
+            // Badge class theo category
+            const badgeClass = `badge-${file.category}`;
+            
             return `
-                <div class="file-card ${selectedFiles.has(file.id) ? 'selected' : ''}" data-id="${file.id}">
+                <tr class="${selectedFiles.has(file.id) ? 'selected' : ''}" data-id="${file.id}">
                     ${checkboxHtml}
-                    <div class="file-preview" onclick="previewFile(${file.id})">
-                        ${previewHtml}
-                    </div>
-                    <div class="file-info">
-                        <div class="file-name" title="${file.filename}">${file.filename}</div>
-                        <div class="file-meta">
-                            ${size} • ${file.category.toUpperCase()}
-                        </div>
-                        <div class="file-folder">${folderName}</div>
-                    </div>
-                    <div class="file-actions">
+                    <td class="file-icon">${icon}</td>
+                    <td class="file-name-cell" onclick="previewFile(${file.id})" title="${file.filename}">
+                        ${file.filename}
+                    </td>
+                    <td>
+                        <span class="file-category-badge ${badgeClass}">${file.category}</span>
+                    </td>
+                    <td class="file-size">${size}</td>
+                    <td>
+                        <span class="file-folder-badge">${folderName}</span>
+                    </td>
+                    <td class="file-actions-cell">
                         <button onclick="previewFile(${file.id})" title="Xem">👁️</button>
                         <button onclick="downloadFile(${file.id})" title="Tải về">⬇️</button>
                         ${deleteButtonHtml}
-                    </div>
-                </div>
+                    </td>
+                </tr>
             `;
         }
         
@@ -1450,12 +1534,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             const deleteBtn = document.getElementById('deleteBtn');
             deleteBtn.style.display = selectedFiles.size > 0 ? 'inline-flex' : 'none';
             
-            document.querySelectorAll('.file-card').forEach(card => {
-                const id = parseInt(card.dataset.id);
+            // Update table rows
+            document.querySelectorAll('#fileTableBody tr[data-id]').forEach(row => {
+                const id = parseInt(row.dataset.id);
                 if (selectedFiles.has(id)) {
-                    card.classList.add('selected');
+                    row.classList.add('selected');
                 } else {
-                    card.classList.remove('selected');
+                    row.classList.remove('selected');
                 }
             });
         }
