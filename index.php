@@ -1609,28 +1609,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                         `;
                     }
                     // Preview cho Word, Excel, PowerPoint (Office files)
-                    else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                    else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(ext)) {
                         const icon = file.category === 'word' ? '📘' : file.category === 'excel' ? '📗' : '📙';
                         const typeName = file.category === 'word' ? 'Word' : file.category === 'excel' ? 'Excel' : 'PowerPoint';
                         
-                        // Office Online Viewer
-                        const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(window.location.origin + '?action=preview&id=' + id)}`;
+                        // Tạo URL public cho file
+                        const fileUrl = encodeURIComponent(window.location.origin + window.location.pathname + '?action=preview&id=' + id);
+                        
+                        // Google Docs Viewer
+                        const googleViewerUrl = `https://docs.google.com/viewer?url=${fileUrl}&embedded=true`;
+                        
+                        // Microsoft Office Online Viewer (backup)
+                        const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${fileUrl}`;
                         
                         previewHtml = `
-                            <div style="text-align: center; padding: 20px;">
-                                <div style="font-size: 5em; margin-bottom: 20px;">${icon}</div>
-                                <h3>${file.filename}</h3>
-                                <p style="color: #6c757d; margin: 15px 0;">
-                                    Loại: ${typeName.toUpperCase()} • Dung lượng: ${formatFileSize(file.filesize)}
-                                </p>
-                                <div style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px;">
-                                    <p style="margin: 0; color: #856404;">
-                                        ℹ️ Tài liệu Office cần tải về để xem đầy đủ nội dung
-                                    </p>
+                            <div style="padding: 20px;">
+                                <div style="margin-bottom: 15px; padding: 12px; background: #e7f3ff; border-radius: 8px; text-align: center;">
+                                    <span style="color: #004085;">
+                                        ${icon} <strong>${file.filename}</strong> • ${formatFileSize(file.filesize)}
+                                    </span>
                                 </div>
-                                <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none; font-size: 16px; padding: 12px 24px;">
-                                    ⬇️ Tải về tài liệu ${typeName}
-                                </a>
+                                
+                                <div style="border: 2px solid #e9ecef; border-radius: 8px; overflow: hidden; margin-bottom: 15px;">
+                                    <iframe src="${googleViewerUrl}" style="width: 100%; height: 70vh; border: none;"></iframe>
+                                </div>
+                                
+                                <div style="text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                                    <button onclick="switchOfficeViewer(${id}, 'google')" class="btn btn-primary" style="font-size: 14px;">
+                                        🔄 Google Viewer
+                                    </button>
+                                    <button onclick="switchOfficeViewer(${id}, 'microsoft')" class="btn btn-primary" style="font-size: 14px;">
+                                        🔄 Microsoft Viewer
+                                    </button>
+                                    <a href="?action=download&id=${id}" class="btn btn-success" style="text-decoration: none; font-size: 14px;">
+                                        ⬇️ Tải về ${typeName}
+                                    </a>
+                                </div>
+                                
+                                <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 8px; font-size: 13px; text-align: center; color: #856404;">
+                                    💡 <strong>Lưu ý:</strong> Nếu không hiển thị, thử chuyển viewer hoặc tải về để xem
+                                </div>
                             </div>
                         `;
                     }
@@ -1689,6 +1707,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        // Switch Office document viewer
+        function switchOfficeViewer(id, viewer) {
+            const fileUrl = encodeURIComponent(window.location.origin + window.location.pathname + '?action=preview&id=' + id);
+            const iframe = document.querySelector('#previewBody iframe');
+            
+            if (iframe) {
+                if (viewer === 'google') {
+                    iframe.src = `https://docs.google.com/viewer?url=${fileUrl}&embedded=true`;
+                } else if (viewer === 'microsoft') {
+                    iframe.src = `https://view.officeapps.live.com/op/embed.aspx?src=${fileUrl}`;
+                }
+            }
         }
         
         async function deleteFile(id) {

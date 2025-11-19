@@ -1,0 +1,11 @@
+CÔNG TY BAO NGOC GROUP
+HỆ THỐNG Y TẾ CHẤT LƯỢNG CAO
+
+QUY TRÌNH KHÁM BỆNH
+
+1. Tiếp nhận bệnh nhân
+2. Kiểm tra thông tin
+3. Khám sơ bộ
+4. Chỉ định xét nghiệm
+5. Chuẩn đoán
+6. Điều trị
