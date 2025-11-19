@@ -342,7 +342,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
             $id = intval($_GET['id']);
             $file = $dm->getFileById($id);
             if ($file && file_exists($file['filepath'])) {
-                $content = file_get_contents($file['filepath']);
+                // Chỉ đọc content cho text files
+                $textCategories = ['text', 'word', 'excel', 'powerpoint'];
+                $textExtensions = ['txt', 'html', 'css', 'js', 'json', 'xml', 'csv', 'md'];
+                $ext = strtolower($file['filetype']);
+                
+                $content = null;
+                if (in_array($file['category'], $textCategories) || in_array($ext, $textExtensions)) {
+                    // Chỉ đọc file nhỏ hơn 1MB
+                    if ($file['filesize'] < 1048576) {
+                        $content = file_get_contents($file['filepath']);
+                    }
+                }
+                
                 echo json_encode(['success' => true, 'file' => $file, 'content' => $content]);
             } else {
                 echo json_encode(['success' => false, 'error' => 'File not found']);
@@ -1176,23 +1188,120 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                     title.textContent = data.file.filename;
                     
                     let previewHtml = '';
+                    const file = data.file;
+                    const ext = file.filetype.toLowerCase();
                     
-                    if (data.file.category === 'image') {
-                        previewHtml = `<img src="?action=preview&id=${id}" alt="${data.file.filename}" style="max-width: 100%;">`;
-                    } else if (data.file.category === 'pdf') {
+                    // Preview cho hình ảnh
+                    if (file.category === 'image' || ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(ext)) {
                         previewHtml = `
-                            <iframe src="?action=preview&id=${id}" style="width: 100%; height: 70vh;"></iframe>
-                            <p style="margin-top: 15px; text-align: center;">
-                                <a href="?action=download&id=${id}" class="btn btn-primary">⬇️ Tải về tài liệu</a>
-                            </p>
+                            <div style="text-align: center; padding: 20px;">
+                                <img src="?action=preview&id=${id}" alt="${file.filename}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                                <p style="margin-top: 15px; color: #6c757d;">
+                                    ${formatFileSize(file.filesize)} • ${ext.toUpperCase()}
+                                </p>
+                            </div>
                         `;
-                    } else {
+                    } 
+                    // Preview cho PDF
+                    else if (file.category === 'pdf' || ext === 'pdf') {
+                        previewHtml = `
+                            <div style="text-align: center;">
+                                <iframe src="?action=preview&id=${id}#toolbar=1&navpanes=1&scrollbar=1" style="width: 100%; height: 70vh; border: 1px solid #e9ecef; border-radius: 8px;"></iframe>
+                                <p style="margin-top: 15px;">
+                                    <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none;">⬇️ Tải về PDF</a>
+                                </p>
+                            </div>
+                        `;
+                    }
+                    // Preview cho text files
+                    else if (data.content && (file.category === 'text' || ['txt', 'html', 'css', 'js', 'json', 'xml', 'csv', 'md'].includes(ext))) {
+                        const escapedContent = escapeHtml(data.content);
+                        previewHtml = `
+                            <div style="padding: 20px;">
+                                <div style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; max-height: 60vh; overflow: auto;">
+                                    <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace; font-size: 14px;">${escapedContent}</pre>
+                                </div>
+                                <p style="margin-top: 15px; text-align: center;">
+                                    <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none;">⬇️ Tải về file</a>
+                                </p>
+                            </div>
+                        `;
+                    }
+                    // Preview cho HTML
+                    else if (ext === 'html' || ext === 'htm') {
+                        previewHtml = `
+                            <div style="padding: 20px;">
+                                <iframe src="?action=preview&id=${id}" style="width: 100%; height: 60vh; border: 1px solid #e9ecef; border-radius: 8px;"></iframe>
+                                <p style="margin-top: 15px; text-align: center;">
+                                    <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none;">⬇️ Tải về HTML</a>
+                                </p>
+                            </div>
+                        `;
+                    }
+                    // Preview cho Word, Excel, PowerPoint (Office files)
+                    else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                        const icon = file.category === 'word' ? '📘' : file.category === 'excel' ? '📗' : '📙';
+                        const typeName = file.category === 'word' ? 'Word' : file.category === 'excel' ? 'Excel' : 'PowerPoint';
+                        
+                        // Office Online Viewer
+                        const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(window.location.origin + '?action=preview&id=' + id)}`;
+                        
+                        previewHtml = `
+                            <div style="text-align: center; padding: 20px;">
+                                <div style="font-size: 5em; margin-bottom: 20px;">${icon}</div>
+                                <h3>${file.filename}</h3>
+                                <p style="color: #6c757d; margin: 15px 0;">
+                                    Loại: ${typeName.toUpperCase()} • Dung lượng: ${formatFileSize(file.filesize)}
+                                </p>
+                                <div style="margin: 20px 0; padding: 15px; background: #fff3cd; border-radius: 8px;">
+                                    <p style="margin: 0; color: #856404;">
+                                        ℹ️ Tài liệu Office cần tải về để xem đầy đủ nội dung
+                                    </p>
+                                </div>
+                                <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none; font-size: 16px; padding: 12px 24px;">
+                                    ⬇️ Tải về tài liệu ${typeName}
+                                </a>
+                            </div>
+                        `;
+                    }
+                    // Preview cho Archive files
+                    else if (file.category === 'archive' || ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
                         previewHtml = `
                             <div style="text-align: center; padding: 40px;">
-                                <div style="font-size: 5em; margin-bottom: 20px;">📄</div>
-                                <h3>${data.file.filename}</h3>
-                                <p style="color: #6c757d; margin: 15px 0;">Loại: ${data.file.category.toUpperCase()} • Dung lượng: ${formatFileSize(data.file.filesize)}</p>
-                                <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none; margin-top: 20px;">⬇️ Tải về tài liệu</a>
+                                <div style="font-size: 5em; margin-bottom: 20px;">📦</div>
+                                <h3>${file.filename}</h3>
+                                <p style="color: #6c757d; margin: 15px 0;">
+                                    File nén • Dung lượng: ${formatFileSize(file.filesize)}
+                                </p>
+                                <div style="margin: 20px 0; padding: 15px; background: #e7f3ff; border-radius: 8px; max-width: 500px; margin-left: auto; margin-right: auto;">
+                                    <p style="margin: 0; color: #004085;">
+                                        ℹ️ File nén cần giải nén để xem nội dung bên trong
+                                    </p>
+                                </div>
+                                <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none; font-size: 16px; padding: 12px 24px;">
+                                    ⬇️ Tải về file nén
+                                </a>
+                            </div>
+                        `;
+                    }
+                    // Default: Không preview được
+                    else {
+                        const icon = fileIcons[file.category] || '📎';
+                        previewHtml = `
+                            <div style="text-align: center; padding: 40px;">
+                                <div style="font-size: 5em; margin-bottom: 20px;">${icon}</div>
+                                <h3>${file.filename}</h3>
+                                <p style="color: #6c757d; margin: 15px 0;">
+                                    Loại: ${file.category.toUpperCase()} • Dung lượng: ${formatFileSize(file.filesize)}
+                                </p>
+                                <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; max-width: 500px; margin-left: auto; margin-right: auto;">
+                                    <p style="margin: 0; color: #6c757d;">
+                                        ℹ️ Loại file này không hỗ trợ preview trực tiếp
+                                    </p>
+                                </div>
+                                <a href="?action=download&id=${id}" class="btn btn-primary" style="text-decoration: none; font-size: 16px; padding: 12px 24px;">
+                                    ⬇️ Tải về tài liệu
+                                </a>
                             </div>
                         `;
                     }
@@ -1204,6 +1313,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
                 console.error('Error:', error);
                 alert('❌ Lỗi khi xem tài liệu!');
             }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
         
         async function deleteFile(id) {
