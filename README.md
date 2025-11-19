@@ -246,7 +246,7 @@ MIT License - Free to use and modify
 
 ## 👨‍💻 Author
 
-Created with ❤️ by Claude AI Assistant
+Created with ❤️ by Tạ Tiến Cường
 
 ---
 
